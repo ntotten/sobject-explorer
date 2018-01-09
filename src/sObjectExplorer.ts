@@ -52,7 +52,7 @@ export class SObjectService {
   private template: any;
 
   constructor(private storagePath: string) {
-    this.template = Handlebars.compile(`# {{label}}
+    this.template = Handlebars.compile(`# {{name}}
     
 {{#each fields}}
 {{name}}: {{type}}
@@ -116,7 +116,7 @@ export class SObjectService {
       });
   }
 
-  private async getSObjectFromServer(uriPath: string): Promise<SObject> {
+  private async getSObjectFromServer(uriPath: string): Promise<any> {
     console.info(
       "Getting sObject from server: ",
       path.join(uriPath, "describe")
