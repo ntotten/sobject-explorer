@@ -16,12 +16,14 @@ import {
 } from "vscode";
 import * as vscode from "vscode";
 import * as path from "path";
+import * as fs from "async-file";
 import { ForceOrgDisplay, OrgInfo } from "./commands/forceOrgDisplay";
 import { RequestService } from "./requestService";
 import {
   DefineGlobal,
   DefineGlobalResponse
 } from "./commands/defineGlobalCommand";
+import { SObject } from "./SObject";
 
 interface IEntry {
   name: string;
@@ -43,8 +45,12 @@ export class SObjectNode {
 export class SObjectModel {
   private orgInfo: OrgInfo;
   private myRequestService = new RequestService();
+  private sobjects: Array<SObject>;
+  private readonly sobjectsCachePath: string;
 
-  constructor(cache?: any) {}
+  constructor(private storagePath: string) {
+    this.sobjectsCachePath = path.join(storagePath, "sobjects.json");
+  }
 
   private async connect() {
     if (this.orgInfo) {
@@ -60,21 +66,64 @@ export class SObjectModel {
     }
   }
 
-  public get roots(): Promise<SObjectNode[]> {
+  private async saveSObjectsToCache(sobjects: Array<SObject>) {
+    console.log("Saving sobejcts to cache.");
+    try {
+      let json = JSON.stringify(sobjects);
+      if (!await fs.exists(this.storagePath)) {
+        fs.mkdir(this.storagePath);
+      }
+      await fs.writeFile(this.sobjectsCachePath, json);
+    } catch (err) {
+      console.log(err);
+    }
+    return sobjects;
+  }
+
+  private async getSObjectsFromCache(): Promise<Array<SObject>> {
+    console.log("Attempting to get sobjects from cache.");
+    if (await fs.exists(this.sobjectsCachePath)) {
+      try {
+        let json = await fs.readFile(this.sobjectsCachePath);
+        console.log("sObjects retrieved from cache.");
+        return JSON.parse(json);
+      } catch (err1) {
+        console.log(err1);
+        try {
+          await fs.unlink(this.sobjectsCachePath);
+        } catch (err2) {
+          console.log(err2);
+        }
+      }
+    }
+  }
+
+  private async getSObjectsFromServer() {
+    console.log("Getting sObjects from server.");
     return this.connect()
       .then(() => this.myRequestService.execute(new DefineGlobal()))
       .then(response => {
         let obj: DefineGlobalResponse = JSON.parse(response);
         return obj.sobjects;
-      })
-      .then(list => {
-        console.log("Returned sObjects");
-        return list.map(entity => new SObjectNode(entity, "/"));
-      })
-      .catch(error => {
-        console.log(error);
-        return new Array<SObjectNode>();
       });
+  }
+
+  public async getSObjects(): Promise<Array<SObject>> {
+    if (!this.sobjects) {
+      // No warmed cache, try to load from file
+      this.sobjects = await this.getSObjectsFromCache();
+      if (!this.sobjects) {
+        // No cached file, request from server and save to cache
+        this.sobjects = await this.getSObjectsFromServer();
+        await this.saveSObjectsToCache(this.sobjects);
+      }
+    }
+    return this.sobjects;
+  }
+
+  public async refreshCache() {
+    this.sobjects = await this.getSObjectsFromServer();
+    await this.saveSObjectsToCache(this.sobjects);
   }
 
   // public getChildren(node: SObjectNode): Thenable<SObjectNode[]> {
@@ -119,7 +168,9 @@ export class SObjectDataProvider
 
   private model: SObjectModel;
 
-  constructor(private storagePath: string) {}
+  constructor(private storagePath: string) {
+    this.model = new SObjectModel(storagePath);
+  }
 
   getTreeItem(element: SObjectNode): TreeItem | Thenable<TreeItem> {
     return {
@@ -144,10 +195,15 @@ export class SObjectDataProvider
   }
 
   getChildren(element?: SObjectNode): ProviderResult<SObjectNode[]> {
-    if (!this.model) {
-      this.model = new SObjectModel();
-    }
-    return this.model.roots;
+    return this.model
+      .getSObjects()
+      .then(sobjects => {
+        return sobjects.map(entity => new SObjectNode(entity, "/"));
+      })
+      .catch(error => {
+        console.log(error);
+        return new Array<SObjectNode>();
+      });
   }
 
   public provideTextDocumentContent(
@@ -158,7 +214,10 @@ export class SObjectDataProvider
     return this.model.getContent(uri);
   }
 
-  refresh() {
-    this.getChildren();
+  public refresh(): Promise<void> {
+    console.log("Refreshing sobjects");
+    return this.model.refreshCache().then(() => {
+      this._onDidChangeTreeData.fire();
+    });
   }
 }
