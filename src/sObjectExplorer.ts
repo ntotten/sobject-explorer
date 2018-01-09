@@ -25,20 +25,19 @@ import {
 } from "./commands/defineGlobalCommand";
 import { SObject } from "./SObject";
 
-interface IEntry {
-  name: string;
-  custom: boolean;
-}
-
 export class SObjectNode {
-  constructor(private entry: IEntry, private _parent: string) {}
+  constructor(private sObject: SObject, private _parent: string) {}
 
   public get name(): string {
-    return this.entry.name;
+    return this.sObject.name;
   }
 
   public get custom(): boolean {
-    return this.entry.custom;
+    return this.sObject.custom;
+  }
+
+  public get resource(): Uri {
+    return Uri.parse("sobject://" + this.sObject.urls.sobject);
   }
 }
 
@@ -48,9 +47,7 @@ export class SObjectModel {
   private sobjects: Array<SObject>;
   private readonly sobjectsCachePath: string;
 
-  constructor(private storagePath: string) {
-    this.sobjectsCachePath = path.join(storagePath, "sobjects.json");
-  }
+  constructor(private storagePath: string) {}
 
   private async connect() {
     if (this.orgInfo) {
@@ -66,33 +63,34 @@ export class SObjectModel {
     }
   }
 
-  private async saveSObjectsToCache(sobjects: Array<SObject>) {
+  private async saveObjectToCache(fileName, obj: any) {
+    let cacheFilePath = path.join(this.storagePath, fileName);
     console.log("Saving sobejcts to cache.");
     try {
-      let json = JSON.stringify(sobjects);
+      let json = JSON.stringify(obj);
       if (!await fs.exists(this.storagePath)) {
         fs.mkdir(this.storagePath);
       }
-      await fs.writeFile(this.sobjectsCachePath, json);
+      await fs.writeFile(cacheFilePath, json);
     } catch (err) {
       console.log(err);
     }
-    return sobjects;
   }
 
-  private async getSObjectsFromCache(): Promise<Array<SObject>> {
+  private async getObjectFromCache(fileName): Promise<any> {
     console.log("Attempting to get sobjects from cache.");
-    if (await fs.exists(this.sobjectsCachePath)) {
+    let cacheFilePath = path.join(this.storagePath, fileName);
+    if (await fs.exists(cacheFilePath)) {
       try {
-        let json = await fs.readFile(this.sobjectsCachePath);
+        let json = await fs.readFile(cacheFilePath);
         console.log("sObjects retrieved from cache.");
         return JSON.parse(json);
       } catch (err1) {
-        console.log(err1);
+        console.warn(err1);
         try {
-          await fs.unlink(this.sobjectsCachePath);
+          await fs.unlink(cacheFilePath);
         } catch (err2) {
-          console.log(err2);
+          console.warn(err2);
         }
       }
     }
@@ -111,11 +109,11 @@ export class SObjectModel {
   public async getSObjects(): Promise<Array<SObject>> {
     if (!this.sobjects) {
       // No warmed cache, try to load from file
-      this.sobjects = await this.getSObjectsFromCache();
+      this.sobjects = await this.getObjectFromCache("sobjects.json");
       if (!this.sobjects) {
         // No cached file, request from server and save to cache
         this.sobjects = await this.getSObjectsFromServer();
-        await this.saveSObjectsToCache(this.sobjects);
+        await this.saveObjectToCache("sobjects.json", this.sobjects);
       }
     }
     return this.sobjects;
@@ -123,7 +121,7 @@ export class SObjectModel {
 
   public async refreshCache() {
     this.sobjects = await this.getSObjectsFromServer();
-    await this.saveSObjectsToCache(this.sobjects);
+    await this.saveObjectToCache("sobjects.json", this.sobjects);
   }
 
   // public getChildren(node: SObjectNode): Thenable<SObjectNode[]> {
@@ -178,7 +176,7 @@ export class SObjectDataProvider
       collapsibleState: void 0,
       command: {
         command: "openSObjectNode",
-        arguments: [element.name],
+        arguments: [element],
         title: "Open sObject"
       },
       iconPath: {

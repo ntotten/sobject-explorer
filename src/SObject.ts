@@ -1,3 +1,5 @@
+import { Url } from "url";
+
 export class SObject {
   public activateable: boolean;
   public createable: boolean;
@@ -22,4 +24,12 @@ export class SObject {
   public triggerable: boolean;
   public undeletable: boolean;
   public updateable: boolean;
+  public urls: ISObjectUrls;
+}
+
+interface ISObjectUrls {
+  rowTemplate: string;
+  defaultValues: string;
+  describe: string;
+  sobject: string;
 }

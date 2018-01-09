@@ -15,8 +15,21 @@ export function activate(context: vscode.ExtensionContext) {
   );
   vscode.window.registerTreeDataProvider("sObjectExplorer", sObjectExplorer);
 
+  vscode.workspace.registerTextDocumentContentProvider(
+    "sobject",
+    sObjectExplorer
+  );
+
+  //   vscode.workspace.onDidChangeTextDocument(
+  //     (e: vscode.TextDocumentChangeEvent) => {
+  //       if (e.document === vscode.window.activeTextEditor.document) {
+  //         provider.update(previewUri);
+  //       }
+  //     }
+  //   );
+
   vscode.commands.registerCommand("openSObjectNode", (node: SObjectNode) => {
-    vscode.workspace.openTextDocument(node.name).then(document => {
+    vscode.workspace.openTextDocument(node.resource).then(document => {
       vscode.window.showTextDocument(document);
     });
   });
