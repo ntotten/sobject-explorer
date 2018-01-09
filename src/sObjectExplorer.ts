@@ -25,6 +25,7 @@ import {
   GetSObjectResponse
 } from "./commands/getDataCommand";
 import { SObject } from "./SObject";
+import * as Handlebars from "handlebars";
 
 export class SObjectNode {
   constructor(private sObject: SObject, private _parent: string) {}
@@ -48,20 +49,24 @@ export class SObjectService {
   private sobjects: Array<SObject>;
   private readonly sobjectsCachePath: string;
 
-  constructor(private storagePath: string) {}
+  private template: any;
+
+  constructor(private storagePath: string) {
+    this.template = Handlebars.compile(`# {{label}}
+    
+{{#each fields}}
+{{name}}: {{type}}
+{{/each}}`);
+  }
 
   private async connect() {
     if (this.orgInfo) {
       return;
     }
-    try {
-      this.orgInfo = await new ForceOrgDisplay().getOrgInfo();
-      this.myRequestService.instanceUrl = this.orgInfo.instanceUrl;
-      this.myRequestService.accessToken = this.orgInfo.accessToken;
-      console.info("Connected to org ", this.orgInfo.orgName);
-    } catch (error) {
-      return Promise.reject(error);
-    }
+    this.orgInfo = await new ForceOrgDisplay().getOrgInfo();
+    this.myRequestService.instanceUrl = this.orgInfo.instanceUrl;
+    this.myRequestService.accessToken = this.orgInfo.accessToken;
+    console.info("Connected to org ", this.orgInfo.orgName);
   }
 
   private async saveObjectToCache(fileName, obj: any) {
@@ -111,13 +116,18 @@ export class SObjectService {
       });
   }
 
-  private async getSObjectFromServer(path: string): Promise<SObject> {
-    console.info("Getting sObject from server: ", path);
+  private async getSObjectFromServer(uriPath: string): Promise<SObject> {
+    console.info(
+      "Getting sObject from server: ",
+      path.join(uriPath, "describe")
+    );
     return this.connect()
-      .then(() => this.myRequestService.execute(new GetDataCommand(path)))
+      .then(() =>
+        this.myRequestService.execute(new GetDataCommand(uriPath + "/describe"))
+      )
       .then(response => {
-        let obj: GetSObjectResponse = JSON.parse(response);
-        return obj.objectDescribe;
+        let obj = JSON.parse(response);
+        return obj;
       });
   }
 
@@ -141,7 +151,7 @@ export class SObjectService {
 
   public async getContent(resource: Uri): Promise<string> {
     let obj = await this.getSObjectFromServer(resource.path);
-    return JSON.stringify(obj, null, 2);
+    return this.template(obj);
   }
 }
 
@@ -157,9 +167,6 @@ export class SObjectDataProvider
   }
 
   getTreeItem(element: SObjectNode): TreeItem | Thenable<TreeItem> {
-    console.log(
-      path.join(__filename, "..", "resources", "dark", "document.svg")
-    );
     return {
       label: element.name,
       collapsibleState: void 0,
