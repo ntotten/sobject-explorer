@@ -27,15 +27,21 @@ import {
 import { SObject } from "./SObject";
 import * as Handlebars from "handlebars";
 
-export class SObjectNode {
+interface ISObjectNode {
+  name: string;
+  type: string;
+  resource: Uri;
+}
+
+export class SObjectNode implements ISObjectNode {
   constructor(private sObject: SObject, private _parent: string) {}
 
   public get name(): string {
     return this.sObject.name;
   }
 
-  public get custom(): boolean {
-    return this.sObject.custom;
+  public get type(): string {
+    return "sObject";
   }
 
   public get resource(): Uri {
@@ -43,19 +49,35 @@ export class SObjectNode {
   }
 }
 
+export class SObjectFieldNode implements ISObjectNode {
+  constructor(private sObjectField: any, private _parent: string) {}
+
+  public get name(): string {
+    return `${this.sObjectField.name}: ${this.sObjectField.type}`;
+  }
+
+  public get type(): string {
+    return this.sObjectField.type;
+  }
+
+  public get resource(): Uri {
+    return Uri.parse(`sobject://${this._parent}/${this.sObjectField.name}`);
+  }
+}
+
 export class SObjectService {
   private orgInfo: OrgInfo;
   private myRequestService = new RequestService();
   private sobjects: Array<SObject>;
+  private sobjectDescriptions: Map<string, any>;
   private readonly sobjectsCachePath: string;
 
   private template: any;
 
   constructor(private storagePath: string) {
-    this.template = Handlebars.compile(`# {{name}}
-    
-{{#each fields}}
-{{name}}: {{type}}
+    this.sobjectDescriptions = new Map<string, any>();
+    this.template = Handlebars.compile(`{{#each this}}
+{{@key}}: {{this}}
 {{/each}}`);
   }
 
@@ -117,10 +139,7 @@ export class SObjectService {
   }
 
   private async getSObjectFromServer(uriPath: string): Promise<any> {
-    console.info(
-      "Getting sObject from server: ",
-      path.join(uriPath, "describe")
-    );
+    console.info("Getting sObject descriptor for: ", uriPath);
     return this.connect()
       .then(() =>
         this.myRequestService.execute(new GetDataCommand(uriPath + "/describe"))
@@ -144,19 +163,38 @@ export class SObjectService {
     return this.sobjects;
   }
 
+  public async getSObjectDescription(resource: Uri): Promise<any> {
+    let description;
+    if (this.sobjectDescriptions.has(resource.path)) {
+      description = this.sobjectDescriptions.get(resource.path);
+    } else {
+      description = await this.getSObjectFromServer(resource.path);
+    }
+
+    return description;
+  }
+
   public async refreshCache() {
     this.sobjects = await this.getSObjectsFromServer();
     await this.saveObjectToCache("sobjects.json", this.sobjects);
   }
 
   public async getContent(resource: Uri): Promise<string> {
-    let obj = await this.getSObjectFromServer(resource.path);
-    return this.template(obj);
+    let resourceUri = Uri.parse(
+      `sobjects://${resource.path.substring(0, resource.path.lastIndexOf("/"))}`
+    );
+    let fieldName = resource.path.substring(resource.path.lastIndexOf("/") + 1);
+    let obj = await this.getSObjectDescription(resourceUri);
+    console.log(fieldName);
+    console.log(obj);
+    let field = obj.fields.find(field => field.name === fieldName);
+    console.log(field);
+    return this.template(field);
   }
 }
 
 export class SObjectDataProvider
-  implements TreeDataProvider<SObjectNode>, TextDocumentContentProvider {
+  implements TreeDataProvider<ISObjectNode>, TextDocumentContentProvider {
   private _onDidChangeTreeData: EventEmitter<any> = new EventEmitter<any>();
   readonly onDidChangeTreeData: Event<any> = this._onDidChangeTreeData.event;
 
@@ -166,36 +204,80 @@ export class SObjectDataProvider
     this.service = new SObjectService(context.storagePath);
   }
 
-  getTreeItem(element: SObjectNode): TreeItem | Thenable<TreeItem> {
+  getIconName(type: string) {
+    let iconName = "document";
+    switch (type) {
+      case "boolean":
+      case "string":
+        return type;
+      case "double":
+      case "int":
+        return "number";
+      case "sObject":
+        return "folder";
+      default:
+        return "document";
+    }
+  }
+
+  getTreeItem(element: ISObjectNode): TreeItem | Thenable<TreeItem> {
     return {
       label: element.name,
-      collapsibleState: void 0,
-      command: {
-        command: "openSObjectNode",
-        arguments: [element],
-        title: "Open sObject"
-      },
+      collapsibleState:
+        element.type === "sObject"
+          ? TreeItemCollapsibleState.Collapsed
+          : void 0,
+      command:
+        element.type === "sObject"
+          ? void 0
+          : {
+              command: "openSObjectNode",
+              arguments: [element],
+              title: "Open sObject"
+            },
       iconPath: {
         light: this.context.asAbsolutePath(
-          path.join("resources", "light", "document.svg")
+          path.join(
+            "resources",
+            "light",
+            this.getIconName(element.type) + ".svg"
+          )
         ),
         dark: this.context.asAbsolutePath(
-          path.join("resources", "dark", "document.svg")
+          path.join(
+            "resources",
+            "dark",
+            this.getIconName(element.type) + ".svg"
+          )
         )
       }
     };
   }
 
-  getChildren(element?: SObjectNode): ProviderResult<SObjectNode[]> {
-    return this.service
-      .getSObjects()
-      .then(sobjects => {
-        return sobjects.map(entity => new SObjectNode(entity, "/"));
-      })
-      .catch(error => {
-        console.error(error);
-        return new Array<SObjectNode>();
-      });
+  getChildren(element?: ISObjectNode): ProviderResult<ISObjectNode[]> {
+    if (element) {
+      return this.service
+        .getSObjectDescription(element.resource)
+        .then(obj => {
+          return obj.fields.map(
+            entity => new SObjectFieldNode(entity, element.resource.path)
+          );
+        })
+        .catch(error => {
+          console.error(error);
+          return new Array<SObjectFieldNode>();
+        });
+    } else {
+      return this.service
+        .getSObjects()
+        .then(sobjects => {
+          return sobjects.map(entity => new SObjectNode(entity, "/"));
+        })
+        .catch(error => {
+          console.error(error);
+          return new Array<SObjectNode>();
+        });
+    }
   }
 
   public provideTextDocumentContent(
