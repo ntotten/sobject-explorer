@@ -7,12 +7,10 @@ import { AnonymousSubscription } from "rxjs/Subscription";
  * For full license text, see LICENSE.txt file in the repo root or https://opensource.org/licenses/BSD-3-Clause
  */
 
-
 export abstract class BaseCommand {
   private readonly queryString: string | undefined;
   private readonly commandName: string;
   private readonly commandMethod: string;
-  private readonly apiPath = 'services/data/v41.0';
   private readonly request: AnonymousSubscription | undefined;
 
   public constructor(
@@ -29,16 +27,16 @@ export abstract class BaseCommand {
 
   public getCommandUrl(): string {
     const urlElements = [
-      this.apiPath,
+      //this.apiPath,
       this.commandName
     ];
-    return urlElements.join('/');
+    return urlElements.join("/");
   }
 
   public getCommandMethod(): string {
     return this.commandMethod;
   }
- 
+
   public getQueryString(): string | undefined {
     return this.queryString;
   }
