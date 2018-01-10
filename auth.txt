@@ -1,7 +1,0 @@
-https://login.salesforce.com/services/oauth2/authorize?response_type=token&redirect_uri=https://test.salesforce.com/services/oauth2/success&client_id=3MVG9oZtFCVWuSwPUC7J71Xdp3my0QF4iDv_OsoIivokGN84NSilTAFSQ1VemuXBbxJI58_5jPw2G75Ja3ly3
-
-
-
-
-00D3C0000008muP%21ARIAQNi5OLPKsMBNRviicvtvxFC7gHyA89ZMg1dnohs7BVo_KeYc6.jIy4CZZma9n_c.AopAemh7J6F8rIzjozrPRkFMojx2
-&instance_url=https%3A%2F%2Fflow-ruby-9854-dev-ed.cs60.my.salesforce.com&id=https%3A%2F%2Ftest.salesforce.com%2Fid%2F00D3C0000008muPUAQ%2F0053C000000HNcZQAW&issued_at=1515501828465&signature=tIXJ1iIlY1tfE7RqOXTpyqTV1UIuHOSNbms%2FCZ%2BJlec%3D&scope=api&token_type=Bearer
