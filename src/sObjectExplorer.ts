@@ -106,12 +106,12 @@ export class SObjectService {
   }
 
   private async getObjectFromCache(fileName): Promise<any> {
-    console.log("Attempting to get sobjects from cache.");
+    console.info("Attempting to get sobjects from cache.");
     let cacheFilePath = path.join(this.storagePath, fileName);
     if (await fs.exists(cacheFilePath)) {
       try {
         let json = await fs.readFile(cacheFilePath);
-        console.log("sObjects retrieved from cache.");
+        console.info("sObjects retrieved from cache.");
         return JSON.parse(json);
       } catch (err1) {
         console.warn(err1);
@@ -185,10 +185,7 @@ export class SObjectService {
     );
     let fieldName = resource.path.substring(resource.path.lastIndexOf("/") + 1);
     let obj = await this.getSObjectDescription(resourceUri);
-    console.log(fieldName);
-    console.log(obj);
     let field = obj.fields.find(field => field.name === fieldName);
-    console.log(field);
     return this.template(field);
   }
 }
@@ -285,7 +282,7 @@ export class SObjectDataProvider
     token: CancellationToken
   ): ProviderResult<string> {
     return this.service.getContent(uri).catch(error => {
-      console.log(error);
+      console.error(error);
       return "Error loading sObject.";
     });
   }
